@@ -46,6 +46,16 @@
 (define-read-only (compute-payout (stake uint) (multiplier-bps uint))
   (ok (/ (* stake multiplier-bps) PRECISION)))
 
+(define-read-only (get-round (round-id uint))
+  (match (map-get? rounds {id: round-id})
+    round-data (ok round-data)
+    (err ERR-ROUND-NOT-FOUND)))
+
+(define-read-only (get-bet (round-id uint) (player principal))
+  (match (map-get? bets {round-id: round-id, player: player})
+    bet (ok bet)
+    (err ERR-ROUND-NOT-FOUND)))
+
 ;; --- public entrypoints -------------------------------------------------------
 
 (define-public (set-contracts (lp principal) (oracle principal))
@@ -129,16 +139,15 @@
                            (is-eq (get direction bet-data) true)
                            (if (< final strike)
                                (is-eq (get direction bet-data) false)
-                               false))))
+                               false)))
+                  (claimant tx-sender))
               (map-set bets {round-id: round-id, player: tx-sender}
                 (merge bet-data {claimed: true}))
               (if won
                   (let ((payout (try! (compute-payout (get stake bet-data)
                                                       (get multiplier-bps bet-data)))))
-                    (as-contract (try! (stx-transfer? payout lp tx-sender)))
+                    (as-contract (try! (stx-transfer? payout lp claimant)))
                     (ok payout))
                   (err ERR-NO-PAYOUT)))
             (err ERR-SETTLED))))
       (err ERR-ROUND-NOT-FOUND))))
-
-;; TODO: add read-only helpers for UI (round-state, player-positions, etc.)
