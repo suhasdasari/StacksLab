@@ -1,4 +1,4 @@
-;; Liquidity Pool Contract (skeleton)
+;; Liquidity Pool Contract
 ;; Tracks LP shares, bankroll, and handles payouts for Bynomo-on-Stacks
 
 (define-constant ERR-NOT-AUTHORIZED u500)
@@ -11,6 +11,7 @@
   {
     shares: uint
   })
+
 
 (define-public (set-admin (new-admin principal))
   (begin
@@ -36,10 +37,23 @@
     ;; TODO: transfer tokens back to LP
     (ok true)))
 
+(define-public (record-stake (amount uint))
+  (begin
+    (asserts! (is-eq tx-sender (var-get pool-admin)) (err ERR-NOT-AUTHORIZED))
+    (var-set pool-balance (+ (var-get pool-balance) amount))
+    (ok true)))
+
+(define-public (record-payout (amount uint))
+  (begin
+    (asserts! (is-eq tx-sender (var-get pool-admin)) (err ERR-NOT-AUTHORIZED))
+    (asserts! (>= (var-get pool-balance) amount) (err ERR-INSUFFICIENT-LIQ))
+    (var-set pool-balance (- (var-get pool-balance) amount))
+    (ok true)))
+
 (define-public (pay-winner (recipient principal) (amount uint))
   (begin
     (asserts! (is-eq tx-sender (var-get pool-admin)) (err ERR-NOT-AUTHORIZED))
     (asserts! (>= (var-get pool-balance) amount) (err ERR-INSUFFICIENT-LIQ))
-    ;; TODO: token transfer
+    ;; TODO: token transfer once STX escrow lives in this contract
     (var-set pool-balance (- (var-get pool-balance) amount))
     (ok true)))
