@@ -1,15 +1,22 @@
 [project]
 name = "bynomo-stacks"
-requirements = []
+description = "Bynomo-style ultra-short options on Stacks"
+authors = []
+telemetry = true
+cache_dir = "./.cache"
+
+[repl.analysis]
+passes = ["check_checker"]
+check_checker = { trusted_sender = false, trusted_caller = false, callee_filter = false }
 
 [contracts.options-core]
 path = "contracts/options-core.clar"
-clarity_version = 2
+epoch = "latest"
 
 [contracts.liquidity-pool]
 path = "contracts/liquidity-pool.clar"
-clarity_version = 2
+epoch = "latest"
 
 [contracts.oracle-adapter]
 path = "contracts/oracle-adapter.clar"
-clarity_version = 2
+epoch = "latest"

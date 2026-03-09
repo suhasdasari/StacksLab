@@ -1,8 +1,8 @@
 ;; Oracle Adapter (skeleton)
 ;; Consumes signed price feeds and exposes sanitized prices to options-core
 
-(define-constant ERR-INVALID-SIGNER (err u600))
-(define-constant ERR-STALE (err u601))
+(define-constant ERR-INVALID-SIGNER u600)
+(define-constant ERR-STALE u601)
 
 (define-data-var signer principal tx-sender)
 
@@ -14,7 +14,7 @@
 
 (define-public (set-signer (new-signer principal))
   (begin
-    (asserts! (is-eq tx-sender (var-get signer)) ERR-INVALID-SIGNER)
+    (asserts! (is-eq tx-sender (var-get signer)) (err ERR-INVALID-SIGNER))
     (var-set signer new-signer)
     (ok true)))
 

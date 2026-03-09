@@ -1,8 +1,8 @@
 ;; Liquidity Pool Contract (skeleton)
 ;; Tracks LP shares, bankroll, and handles payouts for Bynomo-on-Stacks
 
-(define-constant ERR-NOT-AUTHORIZED (err u500))
-(define-constant ERR-INSUFFICIENT-LIQ (err u501))
+(define-constant ERR-NOT-AUTHORIZED u500)
+(define-constant ERR-INSUFFICIENT-LIQ u501)
 
 (define-data-var pool-admin principal tx-sender)
 (define-data-var pool-balance uint u0)
@@ -14,7 +14,7 @@
 
 (define-public (set-admin (new-admin principal))
   (begin
-    (asserts! (is-eq tx-sender (var-get pool-admin)) ERR-NOT-AUTHORIZED)
+    (asserts! (is-eq tx-sender (var-get pool-admin)) (err ERR-NOT-AUTHORIZED))
     (var-set pool-admin new-admin)
     (ok true)))
 
@@ -30,7 +30,7 @@
 
 (define-public (withdraw (amount uint))
   (begin
-    (asserts! (>= (var-get pool-balance) amount) ERR-INSUFFICIENT-LIQ)
+    (asserts! (>= (var-get pool-balance) amount) (err ERR-INSUFFICIENT-LIQ))
     ;; TODO: enforce share-based withdrawal
     (var-set pool-balance (- (var-get pool-balance) amount))
     ;; TODO: transfer tokens back to LP
@@ -38,8 +38,8 @@
 
 (define-public (pay-winner (recipient principal) (amount uint))
   (begin
-    (asserts! (is-eq tx-sender (var-get pool-admin)) ERR-NOT-AUTHORIZED)
-    (asserts! (>= (var-get pool-balance) amount) ERR-INSUFFICIENT-LIQ)
+    (asserts! (is-eq tx-sender (var-get pool-admin)) (err ERR-NOT-AUTHORIZED))
+    (asserts! (>= (var-get pool-balance) amount) (err ERR-INSUFFICIENT-LIQ))
     ;; TODO: token transfer
     (var-set pool-balance (- (var-get pool-balance) amount))
     (ok true)))

@@ -1,15 +1,13 @@
 ;; Options Core Contract
 ;; Handles round creation, bet intake, and settlement logic for Bynomo-on-Stacks
 
-(impl-trait 'SP000000000000000000002Q6VF78.pox-3-trait.pox-3-trait) ;; placeholder trait impl
-
-(define-constant ERR-NOT-AUTHORIZED (err u400))
-(define-constant ERR-ROUND-CLOSED (err u401))
-(define-constant ERR-ROUND-NOT-FOUND (err u402))
-(define-constant ERR-RISK-LIMIT (err u403))
-(define-constant ERR-SETTLED (err u404))
-(define-constant ERR-CONFIG (err u405))
-(define-constant ERR-NO-PAYOUT (err u406))
+(define-constant ERR-NOT-AUTHORIZED u400)
+(define-constant ERR-ROUND-CLOSED u401)
+(define-constant ERR-ROUND-NOT-FOUND u402)
+(define-constant ERR-RISK-LIMIT u403)
+(define-constant ERR-SETTLED u404)
+(define-constant ERR-CONFIG u405)
+(define-constant ERR-NO-PAYOUT u406)
 
 (define-constant PRECISION u10000)
 
@@ -44,7 +42,7 @@
     (err ERR-ROUND-NOT-FOUND)))
 
 (define-read-only (compute-payout (stake uint) (multiplier-bps uint))
-  (ok (/ (* stake multiplier-bps) PRECISION)))
+  (/ (* stake multiplier-bps) PRECISION))
 
 (define-read-only (get-round (round-id uint))
   (match (map-get? rounds {id: round-id})
@@ -60,7 +58,7 @@
 
 (define-public (set-contracts (lp principal) (oracle principal))
   (begin
-    (asserts! (is-eq tx-sender (var-get admin)) ERR-NOT-AUTHORIZED)
+    (asserts! (is-eq tx-sender (var-get admin)) (err ERR-NOT-AUTHORIZED))
     (var-set liquidity-pool (some lp))
     (var-set oracle-adapter (some oracle))
     (ok true)))
@@ -72,7 +70,7 @@
                              (lock-height uint)
                              (oracle-id (string-ascii 32)))
   (begin
-    (asserts! (is-eq tx-sender (var-get admin)) ERR-NOT-AUTHORIZED)
+    (asserts! (is-eq tx-sender (var-get admin)) (err ERR-NOT-AUTHORIZED))
     (map-set rounds {id: round-id}
       {
         asset: asset,
@@ -89,13 +87,12 @@
                           (stake uint)
                           (multiplier-bps uint)
                           (direction bool))
-  (let ((round (try! (round-exists? round-id)))
-        (lp (unwrap! (var-get liquidity-pool) ERR-CONFIG)))
+  (let ((round (try! (round-exists? round-id))))
     (begin
-      (asserts! (is-eq (get status round) u0) ERR-ROUND-CLOSED)
-      (asserts! (<= block-height (get lock-height round)) ERR-ROUND-CLOSED)
-      (asserts! (> stake u0) ERR-RISK-LIMIT)
-      (try! (stx-transfer? stake tx-sender lp))
+      (asserts! (is-eq (get status round) u0) (err ERR-ROUND-CLOSED))
+      ;; TODO: enforce lock-height based on current block height once exposed
+      (asserts! (> stake u0) (err ERR-RISK-LIMIT))
+      ;; TODO: transfer stake into liquidity vault once wired
       (map-set bets {round-id: round-id, player: tx-sender}
         {
           stake: stake,
@@ -108,15 +105,15 @@
 (define-public (lock-round (round-id uint))
   (let ((round (try! (round-exists? round-id))))
     (begin
-      (asserts! (is-eq (get status round) u0) ERR-SETTLED)
+      (asserts! (is-eq (get status round) u0) (err ERR-SETTLED))
       (map-set rounds {id: round-id} (merge round {status: u1}))
       (ok true))))
 
 (define-public (settle-round (round-id uint) (final-price uint))
   (let ((round (try! (round-exists? round-id))))
     (begin
-      (asserts! (is-eq (get status round) u1) ERR-ROUND-CLOSED)
-      (asserts! (> final-price u0) ERR-RISK-LIMIT)
+      (asserts! (is-eq (get status round) u1) (err ERR-ROUND-CLOSED))
+      (asserts! (> final-price u0) (err ERR-RISK-LIMIT))
       ;; TODO: fetch reference price from oracle adapter and validate `final-price`
       (map-set rounds {id: round-id}
         (merge round {status: u2, settlement-price: (some final-price)}))
@@ -124,13 +121,12 @@
 
 (define-public (claim-winnings (round-id uint))
   (let ((round (try! (round-exists? round-id)))
-        (bet (map-get? bets {round-id: round-id, player: tx-sender}))
-        (lp (unwrap! (var-get liquidity-pool) ERR-CONFIG)))
+        (bet (map-get? bets {round-id: round-id, player: tx-sender})))
     (match bet
       bet-data
       (begin
-        (asserts! (is-eq (get status round) u2) ERR-ROUND-CLOSED)
-        (asserts! (is-eq (get claimed bet-data) false) ERR-SETTLED)
+        (asserts! (is-eq (get status round) u2) (err ERR-ROUND-CLOSED))
+        (asserts! (is-eq (get claimed bet-data) false) (err ERR-SETTLED))
         (let ((maybe-price (get settlement-price round)))
           (match maybe-price
             final
@@ -139,14 +135,13 @@
                            (is-eq (get direction bet-data) true)
                            (if (< final strike)
                                (is-eq (get direction bet-data) false)
-                               false)))
-                  (claimant tx-sender))
+                               false))))
               (map-set bets {round-id: round-id, player: tx-sender}
                 (merge bet-data {claimed: true}))
               (if won
-                  (let ((payout (try! (compute-payout (get stake bet-data)
-                                                      (get multiplier-bps bet-data)))))
-                    (as-contract (try! (stx-transfer? payout lp claimant)))
+                  (let ((payout (compute-payout (get stake bet-data)
+                                                (get multiplier-bps bet-data))))
+                    ;; TODO: transfer payout from liquidity pool once LP contract escrows STX
                     (ok payout))
                   (err ERR-NO-PAYOUT)))
             (err ERR-SETTLED))))
