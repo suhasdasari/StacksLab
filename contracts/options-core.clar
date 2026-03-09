@@ -8,10 +8,11 @@
 (define-constant ERR-ROUND-NOT-FOUND (err u402))
 (define-constant ERR-RISK-LIMIT (err u403))
 (define-constant ERR-SETTLED (err u404))
+(define-constant ERR-CONFIG (err u405))
 
 (define-data-var admin principal tx-sender)
-(define-data-var liquidity-pool principal tx-sender)
-(define-data-var oracle-adapter principal tx-sender)
+(define-data-var liquidity-pool (optional principal) none)
+(define-data-var oracle-adapter (optional principal) none)
 
 (define-map rounds {id: uint}
   {
@@ -44,8 +45,8 @@
 (define-public (set-contracts (lp principal) (oracle principal))
   (begin
     (asserts! (is-eq tx-sender (var-get admin)) ERR-NOT-AUTHORIZED)
-    (var-set liquidity-pool lp)
-    (var-set oracle-adapter oracle)
+    (var-set liquidity-pool (some lp))
+    (var-set oracle-adapter (some oracle))
     (ok true)))
 
 (define-public (create-round (round-id uint)
@@ -66,16 +67,19 @@
     (ok round-id)))
 
 (define-public (place-bet (round-id uint)
+                          (stake uint)
                           (multiplier-bps uint)
                           (direction bool))
-  (let ((round (try! (round-exists? round-id))))
+  (let ((round (try! (round-exists? round-id)))
+        (lp (unwrap! (var-get liquidity-pool) ERR-CONFIG)))
     (begin
       (asserts! (is-eq (get status round) u0) ERR-ROUND-CLOSED)
-      ;; TODO: add stake transfer via ft-transfer? or stx-transfer?
-      ;; TODO: enforce risk limits from liquidity pool
+      (asserts! (<= block-height (get lock-height round)) ERR-ROUND-CLOSED)
+      (asserts! (> stake u0) ERR-RISK-LIMIT)
+      (try! (stx-transfer? stake tx-sender lp))
       (map-set bets {round-id: round-id, player: tx-sender}
         {
-          stake: u0,   ;; placeholder until token integration
+          stake: stake,
           multiplier-bps: multiplier-bps,
           direction: direction,
           claimed: false
