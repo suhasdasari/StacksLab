@@ -1,0 +1,15 @@
+[project]
+name = "bynomo-stacks"
+requirements = []
+
+[contracts.options-core]
+path = "contracts/options-core.clar"
+clarity_version = 2
+
+[contracts.liquidity-pool]
+path = "contracts/liquidity-pool.clar"
+clarity_version = 2
+
+[contracts.oracle-adapter]
+path = "contracts/oracle-adapter.clar"
+clarity_version = 2
