@@ -1,7 +1,7 @@
-;; Options Core Contract (skeleton)
+;; Options Core Contract
 ;; Handles round creation, bet intake, and settlement logic for Bynomo-on-Stacks
 
-(impl-trait 'SP000000000000000000002Q6VF78.pox-3-trait.pox-3-trait) ;; placeholder to satisfy clarinet template (remove later)
+(impl-trait 'SP000000000000000000002Q6VF78.pox-3-trait.pox-3-trait) ;; placeholder trait impl
 
 (define-constant ERR-NOT-AUTHORIZED (err u400))
 (define-constant ERR-ROUND-CLOSED (err u401))
@@ -9,6 +9,9 @@
 (define-constant ERR-RISK-LIMIT (err u403))
 (define-constant ERR-SETTLED (err u404))
 (define-constant ERR-CONFIG (err u405))
+(define-constant ERR-NO-PAYOUT (err u406))
+
+(define-constant PRECISION u10000)
 
 (define-data-var admin principal tx-sender)
 (define-data-var liquidity-pool (optional principal) none)
@@ -17,10 +20,12 @@
 (define-map rounds {id: uint}
   {
     asset: (string-ascii 10),
+    strike: uint,
     expiry: uint,
     lock-height: uint,
     oracle-id: (string-ascii 32),
-    status: uint ;; 0 = open, 1 = locked, 2 = settled
+    status: uint, ;; 0 = open, 1 = locked, 2 = settled
+    settlement-price: (optional uint)
   })
 
 (define-map bets {round-id: uint, player: principal}
@@ -33,12 +38,13 @@
 
 ;; --- helpers -----------------------------------------------------------------
 
-(define-read-only (get-admin) (ok (var-get admin)))
-
 (define-read-only (round-exists? (round-id uint))
   (match (map-get? rounds {id: round-id})
     round-data (ok round-data)
     (err ERR-ROUND-NOT-FOUND)))
+
+(define-read-only (compute-payout (stake uint) (multiplier-bps uint))
+  (ok (/ (* stake multiplier-bps) PRECISION)))
 
 ;; --- public entrypoints -------------------------------------------------------
 
@@ -51,6 +57,7 @@
 
 (define-public (create-round (round-id uint)
                              (asset (string-ascii 10))
+                             (strike uint)
                              (expiry uint)
                              (lock-height uint)
                              (oracle-id (string-ascii 32)))
@@ -59,10 +66,12 @@
     (map-set rounds {id: round-id}
       {
         asset: asset,
+        strike: strike,
         expiry: expiry,
         lock-height: lock-height,
         oracle-id: oracle-id,
-        status: u0
+        status: u0,
+        settlement-price: none
       })
     (ok round-id)))
 
@@ -93,25 +102,43 @@
       (map-set rounds {id: round-id} (merge round {status: u1}))
       (ok true))))
 
-(define-public (settle-round (round-id uint) (price uint))
+(define-public (settle-round (round-id uint) (final-price uint))
   (let ((round (try! (round-exists? round-id))))
     (begin
       (asserts! (is-eq (get status round) u1) ERR-ROUND-CLOSED)
-      ;; TODO: fetch reference price from oracle adapter and validate `price`
-      ;; TODO: compute payouts + call into liquidity pool
-      (map-set rounds {id: round-id} (merge round {status: u2}))
+      (asserts! (> final-price u0) ERR-RISK-LIMIT)
+      ;; TODO: fetch reference price from oracle adapter and validate `final-price`
+      (map-set rounds {id: round-id}
+        (merge round {status: u2, settlement-price: (some final-price)}))
       (ok true))))
 
 (define-public (claim-winnings (round-id uint))
-  (let ((position (map-get? bets {round-id: round-id, player: tx-sender})))
-    (match position
+  (let ((round (try! (round-exists? round-id)))
+        (bet (map-get? bets {round-id: round-id, player: tx-sender}))
+        (lp (unwrap! (var-get liquidity-pool) ERR-CONFIG)))
+    (match bet
       bet-data
       (begin
+        (asserts! (is-eq (get status round) u2) ERR-ROUND-CLOSED)
         (asserts! (is-eq (get claimed bet-data) false) ERR-SETTLED)
-        ;; TODO: transfer winnings from liquidity pool
-        (map-set bets {round-id: round-id, player: tx-sender}
-          (merge bet-data {claimed: true}))
-        (ok true))
+        (let ((maybe-price (get settlement-price round)))
+          (match maybe-price
+            final
+            (let ((strike (get strike round))
+                  (won (if (> final strike)
+                           (is-eq (get direction bet-data) true)
+                           (if (< final strike)
+                               (is-eq (get direction bet-data) false)
+                               false))))
+              (map-set bets {round-id: round-id, player: tx-sender}
+                (merge bet-data {claimed: true}))
+              (if won
+                  (let ((payout (try! (compute-payout (get stake bet-data)
+                                                      (get multiplier-bps bet-data)))))
+                    (as-contract (try! (stx-transfer? payout lp tx-sender)))
+                    (ok payout))
+                  (err ERR-NO-PAYOUT)))
+            (err ERR-SETTLED))))
       (err ERR-ROUND-NOT-FOUND))))
 
 ;; TODO: add read-only helpers for UI (round-state, player-positions, etc.)
