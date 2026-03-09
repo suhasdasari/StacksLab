@@ -1,0 +1,113 @@
+;; Options Core Contract (skeleton)
+;; Handles round creation, bet intake, and settlement logic for Bynomo-on-Stacks
+
+(impl-trait 'SP000000000000000000002Q6VF78.pox-3-trait.pox-3-trait) ;; placeholder to satisfy clarinet template (remove later)
+
+(define-constant ERR-NOT-AUTHORIZED (err u400))
+(define-constant ERR-ROUND-CLOSED (err u401))
+(define-constant ERR-ROUND-NOT-FOUND (err u402))
+(define-constant ERR-RISK-LIMIT (err u403))
+(define-constant ERR-SETTLED (err u404))
+
+(define-data-var admin principal tx-sender)
+(define-data-var liquidity-pool principal tx-sender)
+(define-data-var oracle-adapter principal tx-sender)
+
+(define-map rounds {id: uint}
+  {
+    asset: (string-ascii 10),
+    expiry: uint,
+    lock-height: uint,
+    oracle-id: (string-ascii 32),
+    status: uint ;; 0 = open, 1 = locked, 2 = settled
+  })
+
+(define-map bets {round-id: uint, player: principal}
+  {
+    stake: uint,
+    multiplier-bps: uint,
+    direction: bool,
+    claimed: bool
+  })
+
+;; --- helpers -----------------------------------------------------------------
+
+(define-read-only (get-admin) (ok (var-get admin)))
+
+(define-read-only (round-exists? (round-id uint))
+  (match (map-get? rounds {id: round-id})
+    round-data (ok round-data)
+    (err ERR-ROUND-NOT-FOUND)))
+
+;; --- public entrypoints -------------------------------------------------------
+
+(define-public (set-contracts (lp principal) (oracle principal))
+  (begin
+    (asserts! (is-eq tx-sender (var-get admin)) ERR-NOT-AUTHORIZED)
+    (var-set liquidity-pool lp)
+    (var-set oracle-adapter oracle)
+    (ok true)))
+
+(define-public (create-round (round-id uint)
+                             (asset (string-ascii 10))
+                             (expiry uint)
+                             (lock-height uint)
+                             (oracle-id (string-ascii 32)))
+  (begin
+    (asserts! (is-eq tx-sender (var-get admin)) ERR-NOT-AUTHORIZED)
+    (map-set rounds {id: round-id}
+      {
+        asset: asset,
+        expiry: expiry,
+        lock-height: lock-height,
+        oracle-id: oracle-id,
+        status: u0
+      })
+    (ok round-id)))
+
+(define-public (place-bet (round-id uint)
+                          (multiplier-bps uint)
+                          (direction bool))
+  (let ((round (try! (round-exists? round-id))))
+    (begin
+      (asserts! (is-eq (get status round) u0) ERR-ROUND-CLOSED)
+      ;; TODO: add stake transfer via ft-transfer? or stx-transfer?
+      ;; TODO: enforce risk limits from liquidity pool
+      (map-set bets {round-id: round-id, player: tx-sender}
+        {
+          stake: u0,   ;; placeholder until token integration
+          multiplier-bps: multiplier-bps,
+          direction: direction,
+          claimed: false
+        })
+      (ok true))))
+
+(define-public (lock-round (round-id uint))
+  (let ((round (try! (round-exists? round-id))))
+    (begin
+      (asserts! (is-eq (get status round) u0) ERR-SETTLED)
+      (map-set rounds {id: round-id} (merge round {status: u1}))
+      (ok true))))
+
+(define-public (settle-round (round-id uint) (price uint))
+  (let ((round (try! (round-exists? round-id))))
+    (begin
+      (asserts! (is-eq (get status round) u1) ERR-ROUND-CLOSED)
+      ;; TODO: fetch reference price from oracle adapter and validate `price`
+      ;; TODO: compute payouts + call into liquidity pool
+      (map-set rounds {id: round-id} (merge round {status: u2}))
+      (ok true))))
+
+(define-public (claim-winnings (round-id uint))
+  (let ((position (map-get? bets {round-id: round-id, player: tx-sender})))
+    (match position
+      bet-data
+      (begin
+        (asserts! (is-eq (get claimed bet-data) false) ERR-SETTLED)
+        ;; TODO: transfer winnings from liquidity pool
+        (map-set bets {round-id: round-id, player: tx-sender}
+          (merge bet-data {claimed: true}))
+        (ok true))
+      (err ERR-ROUND-NOT-FOUND))))
+
+;; TODO: add read-only helpers for UI (round-state, player-positions, etc.)
