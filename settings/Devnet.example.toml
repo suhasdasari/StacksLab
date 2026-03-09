@@ -1,0 +1,31 @@
+[network]
+name = "devnet"
+deployment_fee_rate = 10
+
+[accounts.deployer]
+mnemonic = "<deployer mnemonic>"
+balance = 100_000_000_000_000
+sbtc_balance = 1_000_000_000
+
+[accounts.wallet_1]
+mnemonic = "<wallet_1 mnemonic>"
+balance = 100_000_000_000_000
+sbtc_balance = 1_000_000_000
+
+[accounts.wallet_2]
+mnemonic = "<wallet_2 mnemonic>"
+balance = 100_000_000_000_000
+sbtc_balance = 1_000_000_000
+
+# ...add any additional wallets you need locally
+
+[devnet]
+disable_stacks_explorer = false
+disable_stacks_api = false
+
+[[devnet.pox_stacking_orders]]
+start_at_cycle = 1
+duration = 10
+auto_extend = true
+wallet = "wallet_1"
+btc_address = "<wallet_1 btc addr>"

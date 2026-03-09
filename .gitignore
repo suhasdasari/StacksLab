@@ -1,0 +1,11 @@
+# Local secrets + settings
+.env
+.env.*
+settings/*.toml
+!settings/*.example.toml
+
+# Clarinet cache
+.cache/
+
+# macOS noise
+.DS_Store

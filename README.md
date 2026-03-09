@@ -64,3 +64,16 @@ scripts/            # Dev scripts, simulations, analyzers
 ```
 
 More docs coming soon in `docs/`. Track tasks via GitHub Issues / Projects.
+
+## Local configuration & secrets
+
+- Copy the sanitized Clarinet examples into real settings files that stay on your machine only:
+  ```bash
+  cp settings/Devnet.example.toml settings/Devnet.toml
+  cp settings/Testnet.example.toml settings/Testnet.toml
+  cp settings/Mainnet.example.toml settings/Mainnet.toml
+  ```
+  Fill in mnemonics or encrypted blobs per Clarinet’s docs.
+- Keep any `.env` or `settings/*.toml` files local—`.gitignore` now blocks them so they never ship to GitHub.
+- Rotate any mnemonics you may have previously committed (the ones in older commits were Clarinet sample keys, but please replace them locally if you cloned earlier).
+
